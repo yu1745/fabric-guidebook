@@ -1,6 +1,8 @@
 {
   "item.fabric_guidebook.guide": "Guidebook",
   "item.fabric_guidebook.guide.missing_guide": "This guidebook has no GuideId.",
+  "key.fabric_guidebook.category": "Fabric Guidebook",
+  "key.fabric_guidebook.open_guide": "Open Guide",
   "message.fabric_guidebook.unknown_guide": "Unknown guide: %s",
   "screen.fabric_guidebook.missing_page": "Missing guide page: %s"
 }

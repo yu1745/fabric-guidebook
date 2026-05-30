@@ -17,5 +17,6 @@ public final class FabricGuidebookClient implements ClientModInitializer {
                 .build());
         Guidebooks.setOpenHandler(ClientGuidebooks::open);
         ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(new GuideResourceReloader());
+        OpenGuideHotkey.init();
     }
 }

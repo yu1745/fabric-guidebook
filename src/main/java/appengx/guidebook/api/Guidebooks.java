@@ -59,14 +59,18 @@ public final class Guidebooks {
     }
 
     private static void openIndexedItem(ItemStack stack) {
+        findIndexedPage(stack).ifPresent(page -> open(page.guideId(), page.anchor()));
+    }
+
+    public static Optional<IndexedPage> findIndexedPage(ItemStack stack) {
         var itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
         for (var guide : GUIDES.values()) {
             var anchor = guide.ae2Guide().getIndex(ItemIndex.class).get(itemId);
             if (anchor != null) {
-                open(guide.id(), anchor);
-                return;
+                return Optional.of(new IndexedPage(guide.id(), anchor));
             }
         }
+        return Optional.empty();
     }
 
     public static void setOpenHandler(OpenHandler handler) {
@@ -79,5 +83,8 @@ public final class Guidebooks {
         };
 
         void open(ResourceLocation guideId, PageAnchor page);
+    }
+
+    public record IndexedPage(ResourceLocation guideId, PageAnchor anchor) {
     }
 }
