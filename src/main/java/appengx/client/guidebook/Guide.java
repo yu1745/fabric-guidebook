@@ -243,6 +243,43 @@ public final class Guide implements PageCollection {
         return extensions;
     }
 
+    public void reloadFrom(ResourceManager resourceManager) {
+        applyPages(loadPages(resourceManager));
+    }
+
+    private Map<ResourceLocation, ParsedGuidePage> loadPages(ResourceManager resourceManager) {
+        Map<ResourceLocation, ParsedGuidePage> pages = new HashMap<>();
+
+        var resources = resourceManager.listResources(folder,
+                location -> location.getPath().endsWith(".md"));
+
+        for (var entry : resources.entrySet()) {
+            var pageId = new ResourceLocation(
+                    entry.getKey().getNamespace(),
+                    entry.getKey().getPath().substring((folder + "/").length()));
+
+            String sourcePackId = entry.getValue().sourcePackId();
+            try (var in = entry.getValue().open()) {
+                pages.put(pageId, PageCompiler.parse(sourcePackId, pageId, in));
+            } catch (IOException e) {
+                LOGGER.error("Failed to load guidebook page {} from pack {}", pageId, sourcePackId, e);
+            }
+        }
+
+        return pages;
+    }
+
+    private void applyPages(Map<ResourceLocation, ParsedGuidePage> pages) {
+        Guide.this.pages = pages;
+        var allPages = new ArrayList<ParsedGuidePage>();
+        allPages.addAll(pages.values());
+        allPages.addAll(developmentPages.values());
+        for (var index : indices.values()) {
+            index.rebuild(allPages);
+        }
+        navigationTree = buildNavigation();
+    }
+
     private class ReloadListener extends SimplePreparableReloadListener<Map<ResourceLocation, ParsedGuidePage>>
             implements IdentifiableResourceReloadListener {
         private final ResourceLocation id;
@@ -260,24 +297,7 @@ public final class Guide implements PageCollection {
         protected Map<ResourceLocation, ParsedGuidePage> prepare(ResourceManager resourceManager,
                 ProfilerFiller profiler) {
             profiler.startTick();
-            Map<ResourceLocation, ParsedGuidePage> pages = new HashMap<>();
-
-            var resources = resourceManager.listResources(folder,
-                    location -> location.getPath().endsWith(".md"));
-
-            for (var entry : resources.entrySet()) {
-                var pageId = new ResourceLocation(
-                        entry.getKey().getNamespace(),
-                        entry.getKey().getPath().substring((folder + "/").length()));
-
-                String sourcePackId = entry.getValue().sourcePackId();
-                try (var in = entry.getValue().open()) {
-                    pages.put(pageId, PageCompiler.parse(sourcePackId, pageId, in));
-                } catch (IOException e) {
-                    LOGGER.error("Failed to load guidebook page {} from pack {}", pageId, sourcePackId, e);
-                }
-            }
-
+            var pages = loadPages(resourceManager);
             profiler.endTick();
             return pages;
         }
@@ -286,17 +306,8 @@ public final class Guide implements PageCollection {
         protected void apply(Map<ResourceLocation, ParsedGuidePage> pages, ResourceManager resourceManager,
                 ProfilerFiller profiler) {
             profiler.startTick();
-            Guide.this.pages = pages;
             profiler.push("indices");
-            var allPages = new ArrayList<ParsedGuidePage>();
-            allPages.addAll(pages.values());
-            allPages.addAll(developmentPages.values());
-            for (var index : indices.values()) {
-                index.rebuild(allPages);
-            }
-            profiler.pop();
-            profiler.push("navigation");
-            navigationTree = buildNavigation();
+            applyPages(pages);
             profiler.pop();
             profiler.endTick();
         }

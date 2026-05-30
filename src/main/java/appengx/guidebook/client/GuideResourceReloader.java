@@ -43,6 +43,7 @@ public final class GuideResourceReloader implements SimpleSynchronousResourceRel
                     .folder(readString(json, "folder", "guidebook/" + fileName))
                     .landingPage(readString(json, "landing_page", "index.md"))
                     .build();
+            guide.ae2Guide().reloadFrom(manager);
 
             return java.util.Optional.of(guide);
         } catch (Exception e) {

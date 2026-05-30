@@ -18,7 +18,9 @@ public final class Guide {
         this.folder = builder.folder;
         this.title = builder.title;
         this.landingPage = builder.landingPage;
-        this.ae2Guide = appengx.client.guidebook.Guide.builder(id.getNamespace(), folder).build();
+        this.ae2Guide = appengx.client.guidebook.Guide.builder(id.getNamespace(), folder)
+                .registerReloadListener(false)
+                .build();
     }
 
     public static Builder builder(ResourceLocation id) {
