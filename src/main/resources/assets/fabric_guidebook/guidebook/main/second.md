@@ -4,6 +4,8 @@ navigation:
   parent: index.md
   position: 10
   icon: minecraft:paper
+item_ids:
+  - minecraft:paper
 ---
 
 # Second Page

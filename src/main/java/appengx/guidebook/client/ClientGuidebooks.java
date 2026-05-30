@@ -12,12 +12,12 @@ public final class ClientGuidebooks {
     private ClientGuidebooks() {
     }
 
-    public static void open(ResourceLocation guideId, String page) {
+    public static void open(ResourceLocation guideId, PageAnchor page) {
         var client = Minecraft.getInstance();
         client.execute(() -> Guidebooks.get(guideId).ifPresentOrElse(
                 guide -> client.setScreen(GuideScreen.openNew(
                         guide.ae2Guide(),
-                        PageAnchor.page(new ResourceLocation(guideId.getNamespace(), page)),
+                        page,
                         GlobalInMemoryHistory.INSTANCE)),
                 () -> {
                     if (client.player != null) {

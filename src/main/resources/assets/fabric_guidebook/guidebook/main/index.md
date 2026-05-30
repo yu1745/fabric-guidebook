@@ -3,6 +3,8 @@ navigation:
   title: Fabric Guidebook
   position: 0
   icon: minecraft:book
+item_ids:
+  - minecraft:book
 ---
 
 # Fabric Guidebook
