@@ -1,3 +1,10 @@
+---
+navigation:
+  title: Fabric Guidebook
+  position: 0
+  icon: minecraft:book
+---
+
 # Fabric Guidebook
 
 This is the built-in guide used to validate the generic guidebook loader.
