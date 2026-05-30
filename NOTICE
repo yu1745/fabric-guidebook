@@ -1,0 +1,20 @@
+Fabric Guidebook
+
+This project includes code migrated from Applied Energistics 2:
+
+- Source repository: https://github.com/AppliedEnergistics/Applied-Energistics-2
+- Source branch: fabric/1.20.1
+- Source commit: 270059383037770acdcd13a6884436ba2211984a
+- Migrated source areas:
+  - src/main/java/appeng/client/guidebook/**
+  - libs/markdown/src/main/java/appeng/libs/**
+- Package relocation:
+  - appeng.client.guidebook -> appengx.client.guidebook
+  - appeng.libs -> appengx.libs
+
+Applied Energistics 2 is licensed under LGPL-3.0-or-later. The LGPL-3.0
+license text is included in LICENSE-LGPL-3.0.
+
+Guidebook integration, resource discovery, item registration, and public API
+code in this repository uses the appengx package namespace to avoid collisions
+with Applied Energistics 2.
