@@ -12,7 +12,7 @@ item_ids:
 
 This page renders a structure loaded from SNBT.
 
-<GameScene zoom={1.2} interactive={true} fullWidth={true}>
+<GameScene zoom="1.2" interactive={true} fullWidth={true}>
   <ImportStructure src="scene_stone.snbt" />
-  <IsometricCamera yaw={35} pitch={25} />
+  <IsometricCamera yaw="35" pitch="25" />
 </GameScene>
