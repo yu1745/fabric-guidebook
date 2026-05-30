@@ -1,0 +1,9 @@
+{
+  "item.fabric_guidebook.guide": "指南书",
+  "item.fabric_guidebook.guide.missing_guide": "这本指南书没有 GuideId。",
+  "item.fabric_guidebook.starter_guide": "%s 指南",
+  "key.fabric_guidebook.category": "Fabric Guidebook",
+  "key.fabric_guidebook.open_guide": "打开指南",
+  "message.fabric_guidebook.unknown_guide": "未知指南：%s",
+  "screen.fabric_guidebook.missing_page": "缺失指南页面：%s"
+}

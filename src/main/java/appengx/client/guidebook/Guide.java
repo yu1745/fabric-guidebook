@@ -2,6 +2,7 @@ package appengx.client.guidebook;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -75,9 +76,12 @@ public final class Guide implements PageCollection {
     private final ExtensionCollection extensions;
 
     @Nullable
-    private final Path developmentSourceFolder;
+    private Path developmentSourceFolder;
     @Nullable
-    private final String developmentSourceNamespace;
+    private String developmentSourceNamespace;
+    @Nullable
+    private GuideSourceWatcher developmentSourceWatcher;
+    private boolean developmentSourceTickRegistered;
 
     private Guide(String defaultNamespace,
             String folder,
@@ -267,7 +271,8 @@ public final class Guide implements PageCollection {
             String pageIdPrefix,
             boolean skipLocalizedPages) {
         var resources = resourceManager.listResources(folder,
-                location -> location.getPath().startsWith(searchFolder + "/")
+                location -> location.getNamespace().equals(defaultNamespace)
+                        && location.getPath().startsWith(searchFolder + "/")
                         && location.getPath().endsWith(".md")
                         && (!skipLocalizedPages || !location.getPath().startsWith(
                                 folder + "/" + LOCALIZED_PAGES_FOLDER + "/")));
@@ -279,9 +284,16 @@ public final class Guide implements PageCollection {
 
             String sourcePackId = entry.getValue().sourcePackId();
             try (var in = entry.getValue().open()) {
-                pages.put(pageId, PageCompiler.parse(sourcePackId, pageId, in));
-            } catch (IOException e) {
+                var pageContent = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+                pages.put(pageId, PageCompiler.parse(sourcePackId, pageId, pageContent));
+            } catch (Exception e) {
                 LOGGER.error("Failed to load guidebook page {} from pack {}", pageId, sourcePackId, e);
+                try (var in = entry.getValue().open()) {
+                    var pageContent = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+                    pages.put(pageId, PageCompiler.parseError(sourcePackId, pageId, pageContent, e));
+                } catch (Exception errorPageFailure) {
+                    LOGGER.error("Failed to create error page for {}", pageId, errorPageFailure);
+                }
             }
         }
     }
@@ -335,15 +347,82 @@ public final class Guide implements PageCollection {
         }
     }
 
+    public void enableDevelopmentSources(Path sourceFolder, String namespace) {
+        Objects.requireNonNull(sourceFolder, "sourceFolder");
+        Objects.requireNonNull(namespace, "namespace");
+        developmentSourceFolder = sourceFolder;
+        developmentSourceNamespace = namespace;
+        developmentPages.clear();
+        watchDevelopmentSources();
+
+        if (pages != null) {
+            applyPages(pages);
+        }
+        reloadOpenScreen();
+    }
+
+    public void disableDevelopmentSources() {
+        if (developmentSourceWatcher != null) {
+            developmentSourceWatcher.close();
+            developmentSourceWatcher = null;
+        }
+        developmentSourceFolder = null;
+        developmentSourceNamespace = null;
+        developmentPages.clear();
+        if (pages != null) {
+            applyPages(pages);
+        }
+        reloadOpenScreen();
+    }
+
+    public void reloadDevelopmentSourcesNow() {
+        if (developmentSourceWatcher == null) {
+            return;
+        }
+
+        developmentPages.clear();
+        for (var page : developmentSourceWatcher.loadAll()) {
+            developmentPages.put(page.getId(), page);
+        }
+        if (pages != null) {
+            applyPages(pages);
+        }
+        reloadOpenScreen();
+    }
+
     private void watchDevelopmentSources() {
+        if (developmentSourceFolder == null || developmentSourceNamespace == null) {
+            return;
+        }
+
+        if (developmentSourceWatcher != null) {
+            developmentSourceWatcher.close();
+        }
+
         var watcher = new GuideSourceWatcher(developmentSourceNamespace, developmentSourceFolder);
-        ClientTickEvents.START_CLIENT_TICK.register(client -> {
-            var changes = watcher.takeChanges();
-            if (!changes.isEmpty()) {
-                applyChanges(changes);
-            }
-        });
-        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> watcher.close());
+        developmentSourceWatcher = watcher;
+        if (!developmentSourceTickRegistered) {
+            developmentSourceTickRegistered = true;
+            ClientTickEvents.START_CLIENT_TICK.register(client -> {
+                if (developmentSourceWatcher == null) {
+                    return;
+                }
+                var changes = developmentSourceWatcher.takeChanges();
+                var assetsChanged = developmentSourceWatcher.takeAssetsChanged();
+                if (!changes.isEmpty()) {
+                    applyChanges(changes);
+                }
+                if (assetsChanged) {
+                    reloadOpenScreen();
+                }
+            });
+            ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
+                if (developmentSourceWatcher != null) {
+                    developmentSourceWatcher.close();
+                    developmentSourceWatcher = null;
+                }
+            });
+        }
         for (var page : watcher.loadAll()) {
             developmentPages.put(page.getId(), page);
         }
@@ -381,6 +460,12 @@ public final class Guide implements PageCollection {
             if (changes.stream().anyMatch(c -> c.pageId().equals(currentPageId))) {
                 guideScreen.reloadPage();
             }
+        }
+    }
+
+    private void reloadOpenScreen() {
+        if (Minecraft.getInstance().screen instanceof GuideScreen guideScreen && guideScreen.getGuide() == this) {
+            guideScreen.reloadPage();
         }
     }
 

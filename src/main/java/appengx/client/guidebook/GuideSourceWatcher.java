@@ -1,11 +1,16 @@
 package appengx.client.guidebook;
 
 import java.io.IOException;
+import java.nio.file.ClosedWatchServiceException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.FileVisitor;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardWatchEventKinds;
+import java.nio.file.WatchKey;
+import java.nio.file.WatchService;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -22,10 +27,6 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import io.methvin.watcher.DirectoryChangeEvent;
-import io.methvin.watcher.DirectoryChangeListener;
-import io.methvin.watcher.DirectoryWatcher;
 
 import net.fabricmc.loader.impl.FabricLoaderImpl;
 import net.minecraft.resources.ResourceLocation;
@@ -49,11 +50,13 @@ class GuideSourceWatcher {
 
     // Recursive directory watcher for the guidebook sources.
     @Nullable
-    private final DirectoryWatcher sourceWatcher;
+    private WatchService sourceWatcher;
+    private final Map<WatchKey, Path> watchedDirectories = new HashMap<>();
 
     // Queued changes that come in from a separate thread
     private final Map<ResourceLocation, ParsedGuidePage> changedPages = new HashMap<>();
     private final Set<ResourceLocation> deletedPages = new HashSet<>();
+    private boolean assetsChanged;
 
     private final ExecutorService watchExecutor;
 
@@ -77,22 +80,20 @@ class GuideSourceWatcher {
 
         // Watch the folder recursively in a separate thread, queue up any changes and apply them
         // in the client tick.
-        DirectoryWatcher watcher;
+        WatchService watcher;
         try {
-            watcher = DirectoryWatcher.builder()
-                    .path(sourceFolder)
-                    .fileHashing(false)
-                    .listener(new Listener())
-                    .build();
+            watcher = sourceFolder.getFileSystem().newWatchService();
+            sourceWatcher = watcher;
+            registerDirectoryTree(sourceFolder);
         } catch (IOException e) {
             LOGGER.error("Failed to watch for changes in the guidebook sources at {}", sourceFolder, e);
             watcher = null;
+            sourceWatcher = null;
         }
-        sourceWatcher = watcher;
 
         // Actually process changes in the client tick to prevent race conditions and other crashes
         if (sourceWatcher != null) {
-            sourceWatcher.watchAsync(watchExecutor);
+            watchExecutor.submit(this::watchLoop);
         }
     }
 
@@ -140,12 +141,19 @@ class GuideSourceWatcher {
                 .stream()
                 .map(entry -> {
                     var path = entry.getValue();
-                    try (var in = Files.newInputStream(path)) {
-                        return PageCompiler.parse(sourcePackId, entry.getKey(), in);
+                    try {
+                        var pageContent = Files.readString(path, StandardCharsets.UTF_8);
+                        return PageCompiler.parse(sourcePackId, entry.getKey(), pageContent);
 
                     } catch (Exception e) {
                         LOGGER.error("Failed to reload guidebook page {}", path, e);
-                        return null;
+                        try {
+                            var pageContent = Files.readString(path, StandardCharsets.UTF_8);
+                            return PageCompiler.parseError(sourcePackId, entry.getKey(), pageContent, e);
+                        } catch (Exception errorPageFailure) {
+                            LOGGER.error("Failed to create error page for {}", path, errorPageFailure);
+                            return null;
+                        }
                     }
                 })
                 .filter(Objects::nonNull)
@@ -177,10 +185,17 @@ class GuideSourceWatcher {
         return changes;
     }
 
+    public synchronized boolean takeAssetsChanged() {
+        var result = assetsChanged;
+        assetsChanged = false;
+        return result;
+    }
+
     public synchronized void close() {
         changedPages.clear();
         deletedPages.clear();
-        watchExecutor.shutdown();
+        watchedDirectories.clear();
+        watchExecutor.shutdownNow();
 
         if (sourceWatcher != null) {
             try {
@@ -191,44 +206,129 @@ class GuideSourceWatcher {
         }
     }
 
-    private class Listener implements DirectoryChangeListener {
-        @Override
-        public void onEvent(DirectoryChangeEvent event) {
-            if (event.isDirectory()) {
+    private void watchLoop() {
+        while (!Thread.currentThread().isInterrupted() && sourceWatcher != null) {
+            WatchKey key;
+            try {
+                key = sourceWatcher.take();
+            } catch (ClosedWatchServiceException e) {
+                return;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
                 return;
             }
-            switch (event.eventType()) {
-                case CREATE, MODIFY -> pageChanged(event.path());
-                case DELETE -> pageDeleted(event.path());
+
+            Path directory;
+            synchronized (this) {
+                directory = watchedDirectories.get(key);
+            }
+            if (directory == null) {
+                key.reset();
+                continue;
+            }
+
+            for (var event : key.pollEvents()) {
+                var kind = event.kind();
+                if (kind == StandardWatchEventKinds.OVERFLOW) {
+                    synchronized (this) {
+                        assetsChanged = true;
+                    }
+                    continue;
+                }
+
+                var changedPath = directory.resolve((Path) event.context());
+                if (kind == StandardWatchEventKinds.ENTRY_CREATE) {
+                    if (Files.isDirectory(changedPath)) {
+                        try {
+                            registerDirectoryTree(changedPath);
+                        } catch (IOException e) {
+                            LOGGER.error("Failed to watch new guidebook source folder {}", changedPath, e);
+                        }
+                        synchronized (this) {
+                            assetsChanged = true;
+                        }
+                    } else {
+                        pageChanged(changedPath);
+                    }
+                } else if (kind == StandardWatchEventKinds.ENTRY_MODIFY) {
+                    pageChanged(changedPath);
+                } else if (kind == StandardWatchEventKinds.ENTRY_DELETE) {
+                    pageDeleted(changedPath);
+                }
+            }
+
+            var valid = key.reset();
+            if (!valid) {
+                synchronized (this) {
+                    watchedDirectories.remove(key);
+                }
             }
         }
+    }
 
-        @Override
-        public boolean isWatching() {
-            return sourceWatcher != null && !sourceWatcher.isClosed();
-        }
+    private void registerDirectoryTree(Path root) throws IOException {
+        Files.walkFileTree(root, new FileVisitor<>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                registerDirectory(dir);
+                return FileVisitResult.CONTINUE;
+            }
 
-        @Override
-        public void onException(Exception e) {
-            LOGGER.error("Failed watching for changes", e);
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                LOGGER.error("Failed to list guidebook source folder {}", file, exc);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path dir, IOException exc) {
+                if (exc != null) {
+                    LOGGER.error("Failed to list guidebook source folder {}", dir, exc);
+                }
+                return FileVisitResult.CONTINUE;
+            }
+        });
+    }
+
+    private synchronized void registerDirectory(Path directory) throws IOException {
+        if (sourceWatcher == null) {
+            return;
         }
+        var key = directory.register(sourceWatcher,
+                StandardWatchEventKinds.ENTRY_CREATE,
+                StandardWatchEventKinds.ENTRY_MODIFY,
+                StandardWatchEventKinds.ENTRY_DELETE);
+        watchedDirectories.put(key, directory);
     }
 
     // Only call while holding the lock!
     private synchronized void pageChanged(Path path) {
         var pageId = getPageId(path);
         if (pageId == null) {
+            assetsChanged = true;
             return; // Probably not a page
         }
 
         // If it was previously deleted in the same change-set, undelete it
         deletedPages.remove(pageId);
 
-        try (var in = Files.newInputStream(path)) {
-            var page = PageCompiler.parse(sourcePackId, pageId, in);
+        try {
+            var pageContent = Files.readString(path, StandardCharsets.UTF_8);
+            var page = PageCompiler.parse(sourcePackId, pageId, pageContent);
             changedPages.put(pageId, page);
         } catch (Exception e) {
             LOGGER.error("Failed to reload guidebook page {}", path, e);
+            try {
+                var pageContent = Files.readString(path, StandardCharsets.UTF_8);
+                changedPages.put(pageId, PageCompiler.parseError(sourcePackId, pageId, pageContent, e));
+            } catch (Exception errorPageFailure) {
+                LOGGER.error("Failed to create error page for {}", path, errorPageFailure);
+            }
         }
     }
 
@@ -236,6 +336,7 @@ class GuideSourceWatcher {
     private synchronized void pageDeleted(Path path) {
         var pageId = getPageId(path);
         if (pageId == null) {
+            assetsChanged = true;
             return; // Probably not a page
         }
 

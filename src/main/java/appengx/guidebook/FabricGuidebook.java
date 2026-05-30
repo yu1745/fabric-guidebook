@@ -14,5 +14,6 @@ public final class FabricGuidebook implements ModInitializer {
     @Override
     public void onInitialize() {
         GuidebookItems.register();
+        GuideStarterBooks.register();
     }
 }

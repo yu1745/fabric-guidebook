@@ -1,6 +1,9 @@
 package appengx.client.guidebook.scene.element;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Locale;
 import java.util.Set;
 
@@ -44,22 +47,36 @@ public class ImportStructureElementCompiler implements SceneElementTagCompiler {
         }
 
         ResourceLocation absStructureSrc;
-        try {
-            absStructureSrc = IdUtils.resolveLink(structureSrc, compiler.getPageId());
-        } catch (ResourceLocationException e) {
-            errorSink.appendError(compiler, "Invalid structure path: " + structureSrc, el);
-            return;
-        }
+        byte[] structureNbtData;
+        if (structureSrc.startsWith("/") || structureSrc.startsWith("file:")) {
+            try {
+                Path structurePath = structureSrc.startsWith("file:")
+                        ? Paths.get(java.net.URI.create(structureSrc))
+                        : Paths.get(structureSrc);
+                structureNbtData = Files.readAllBytes(structurePath);
+            } catch (Exception e) {
+                errorSink.appendError(compiler, "Missing structure file: " + structureSrc, el);
+                return;
+            }
+            absStructureSrc = null;
+        } else {
+            try {
+                absStructureSrc = IdUtils.resolveLink(structureSrc, compiler.getPageId());
+            } catch (ResourceLocationException e) {
+                errorSink.appendError(compiler, "Invalid structure path: " + structureSrc, el);
+                return;
+            }
 
-        var structureNbtData = compiler.loadAsset(absStructureSrc);
-        if (structureNbtData == null) {
-            errorSink.appendError(compiler, "Missing structure file", el);
-            return;
+            structureNbtData = compiler.loadAsset(absStructureSrc);
+            if (structureNbtData == null) {
+                errorSink.appendError(compiler, "Missing structure file", el);
+                return;
+            }
         }
 
         CompoundTag compoundTag;
         try {
-            if (absStructureSrc.getPath().toLowerCase(Locale.ROOT).endsWith(".snbt")) {
+            if (structureSrc.toLowerCase(Locale.ROOT).endsWith(".snbt")) {
                 compoundTag = NbtUtils.snbtToStructure(
                         new String(structureNbtData, StandardCharsets.UTF_8));
             } else {

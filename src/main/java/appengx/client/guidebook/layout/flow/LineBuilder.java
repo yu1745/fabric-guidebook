@@ -211,6 +211,7 @@ class LineBuilder implements Consumer<LytFlowContent> {
         var lineBuffer = new StringBuilder();
 
         boolean lastCharWasWhitespace = Character.isWhitespace(lastChar);
+        int previousCodePoint = lastChar == '\0' || lastChar == '\n' ? -1 : lastChar;
         // When starting after a whitespace on an existing line, we have a break opportunity at the start
         if (lastCharWasWhitespace) {
             lastBreakOpportunity = 0;
@@ -238,14 +239,22 @@ class LineBuilder implements Consumer<LytFlowContent> {
                     consumer.visitRun(lineBuffer, curLineWidth, true);
                     lineBuffer.setLength(0);
                     widthAtBreakOpportunity = curLineWidth = 0;
-                    lastBreakOpportunity = 0;
+                    lastBreakOpportunity = -1;
                     lastCharWasWhitespace = true;
+                    previousCodePoint = -1;
                     remainingLineWidth = getAvailableHorizontalSpace();
                     continue;
                 }
             }
 
-            if (Character.isWhitespace(codePoint)) {
+            var codePointIsWhitespace = Character.isWhitespace(codePoint);
+            if (!codePointIsWhitespace && isCjkLineBreakBoundary(previousCodePoint, codePoint)
+                    && !lineBuffer.isEmpty()) {
+                lastBreakOpportunity = lineBuffer.length();
+                widthAtBreakOpportunity = curLineWidth;
+            }
+
+            if (codePointIsWhitespace) {
                 // Skip if the last one was a space already
                 if (lastCharWasWhitespace && style.whiteSpace().isCollapseWhitespace()) {
                     continue; // White space collapsing
@@ -272,15 +281,18 @@ class LineBuilder implements Consumer<LytFlowContent> {
                         lineBuffer.deleteCharAt(0);
                         curLineWidth -= context.getAdvance(firstChar, style);
                     }
+                    previousCodePoint = lastCodePointOf(lineBuffer);
+                    lastCharWasWhitespace = previousCodePoint != -1 && Character.isWhitespace(previousCodePoint);
                 } else {
                     // We exceeded the line length, but did not find a break opportunity
                     // this causes a forced break mid-word
                     consumer.visitRun(lineBuffer, curLineWidth, true);
                     lineBuffer.setLength(0);
                     curLineWidth = 0;
+                    previousCodePoint = -1;
                 }
-                lastBreakOpportunity = 0;
-                widthAtBreakOpportunity = curLineWidth;
+                lastBreakOpportunity = -1;
+                widthAtBreakOpportunity = 0;
                 remainingLineWidth = getAvailableHorizontalSpace();
                 // If a white-space character broke the line, ignore it as it
                 // would otherwise be at the start of the next line
@@ -290,11 +302,42 @@ class LineBuilder implements Consumer<LytFlowContent> {
             }
             curLineWidth += advance;
             lineBuffer.appendCodePoint(codePoint);
+            previousCodePoint = codePoint;
         }
 
         if (!lineBuffer.isEmpty()) {
             consumer.visitRun(lineBuffer, curLineWidth, false);
         }
+    }
+
+    private static int lastCodePointOf(StringBuilder text) {
+        if (text.isEmpty()) {
+            return -1;
+        }
+        return text.codePointBefore(text.length());
+    }
+
+    private static boolean isCjkLineBreakBoundary(int previousCodePoint, int codePoint) {
+        return previousCodePoint != -1 && (isCjkCodePoint(previousCodePoint) || isCjkCodePoint(codePoint));
+    }
+
+    private static boolean isCjkCodePoint(int codePoint) {
+        var block = Character.UnicodeBlock.of(codePoint);
+        return block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS
+                || block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS_EXTENSION_A
+                || block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS_EXTENSION_B
+                || block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS_EXTENSION_C
+                || block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS_EXTENSION_D
+                || block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS_EXTENSION_E
+                || block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS_EXTENSION_F
+                || block == Character.UnicodeBlock.CJK_COMPATIBILITY_IDEOGRAPHS
+                || block == Character.UnicodeBlock.CJK_SYMBOLS_AND_PUNCTUATION
+                || block == Character.UnicodeBlock.HALFWIDTH_AND_FULLWIDTH_FORMS
+                || block == Character.UnicodeBlock.HIRAGANA
+                || block == Character.UnicodeBlock.KATAKANA
+                || block == Character.UnicodeBlock.HANGUL_SYLLABLES
+                || block == Character.UnicodeBlock.HANGUL_JAMO
+                || block == Character.UnicodeBlock.HANGUL_COMPATIBILITY_JAMO;
     }
 
     private void endLine() {

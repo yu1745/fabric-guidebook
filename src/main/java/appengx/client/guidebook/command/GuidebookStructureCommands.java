@@ -38,6 +38,9 @@ import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.levelgen.SingleThreadedRandomSource;
@@ -60,20 +63,60 @@ public class GuidebookStructureCommands {
 
     private static final String FILE_PATTERN_DESC = "Structure NBT Files (*.snbt, *.nbt)";
 
+    private static boolean canUseStructureCommands(CommandSourceStack source) {
+        return Minecraft.getInstance().hasSingleplayerServer() && source.hasPermission(2);
+    }
+
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        LiteralArgumentBuilder<CommandSourceStack> rootCommand = literal("fabricguidebook");
+        LiteralArgumentBuilder<CommandSourceStack> rootCommand = literal("fabricguidebookstructure");
 
         registerImportCommand(rootCommand);
 
         registerExportCommand(rootCommand);
 
+        registerStructureToolCommand(rootCommand);
+
+        registerClearSelectionCommand(rootCommand);
+
         dispatcher.register(rootCommand);
+    }
+
+    private static void registerStructureToolCommand(LiteralArgumentBuilder<CommandSourceStack> rootCommand) {
+        LiteralArgumentBuilder<CommandSourceStack> toolSubcommand = literal("structuretool");
+        toolSubcommand.requires(GuidebookStructureCommands::canUseStructureCommands);
+        toolSubcommand.executes(context -> {
+            giveStructureTool(context.getSource().getPlayerOrException());
+            return 1;
+        });
+        rootCommand.then(toolSubcommand);
+    }
+
+    private static void giveStructureTool(ServerPlayer player) {
+        var stack = new ItemStack(Items.STICK);
+        stack.getOrCreateTag().putBoolean(GuidebookStructureSelection.TOOL_TAG, true);
+        stack.setHoverName(Component.literal("Guidebook Structure Selector"));
+        if (!player.getInventory().add(stack)) {
+            player.drop(stack, false);
+        }
+        player.sendSystemMessage(Component.literal(
+                "Guidebook structure selector: left-click start, right-click end, then run /fabricguidebookstructure exportstructure"));
+    }
+
+    private static void registerClearSelectionCommand(LiteralArgumentBuilder<CommandSourceStack> rootCommand) {
+        LiteralArgumentBuilder<CommandSourceStack> clearSubcommand = literal("clearstructureselection");
+        clearSubcommand.requires(GuidebookStructureCommands::canUseStructureCommands);
+        clearSubcommand.executes(context -> {
+            GuidebookStructureSelection.clear();
+            context.getSource().sendSuccess(() -> Component.literal("Cleared guidebook structure selection"), false);
+            return 1;
+        });
+        rootCommand.then(clearSubcommand);
     }
 
     private static void registerImportCommand(LiteralArgumentBuilder<CommandSourceStack> rootCommand) {
         LiteralArgumentBuilder<CommandSourceStack> importSubcommand = literal("importstructure");
         // Only usable on singleplayer worlds and only by the local player (in case it is opened to LAN)
-        importSubcommand.requires(source -> Minecraft.getInstance().hasSingleplayerServer());
+        importSubcommand.requires(GuidebookStructureCommands::canUseStructureCommands);
         importSubcommand
                 .then(Commands.argument("origin", BlockPosArgument.blockPos())
                         .executes(context -> {
@@ -147,8 +190,18 @@ public class GuidebookStructureCommands {
     private static void registerExportCommand(LiteralArgumentBuilder<CommandSourceStack> rootCommand) {
         LiteralArgumentBuilder<CommandSourceStack> exportSubcommand = literal("exportstructure");
         // Only usable on singleplayer worlds and only by the local player (in case it is opened to LAN)
-        exportSubcommand.requires(source -> Minecraft.getInstance().hasSingleplayerServer());
+        exportSubcommand.requires(GuidebookStructureCommands::canUseStructureCommands);
         exportSubcommand
+                .executes(context -> {
+                    var selection = GuidebookStructureSelection.getSelectedRegion(context.getSource().getLevel());
+                    if (selection == null) {
+                        context.getSource().sendFailure(Component.literal(
+                                "No guidebook structure selection. Use /fabricguidebookstructure structuretool, then left-click start and right-click end."));
+                        return 0;
+                    }
+                    exportStructure(context.getSource().getLevel(), selection.origin(), selection.size());
+                    return 1;
+                })
                 .then(Commands.argument("origin", BlockPosArgument.blockPos())
                         .then(Commands.argument("sizeX", IntegerArgumentType.integer(1))
                                 .then(Commands.argument("sizeY", IntegerArgumentType.integer(1))
@@ -231,6 +284,7 @@ public class GuidebookStructureCommands {
     }
 
     private static String pickFileForOpen() {
+        releaseMouseForNativeDialog();
         try (var stack = MemoryStack.stackPush()) {
 
             return TinyFileDialogs.tinyfd_openFileDialog(
@@ -243,6 +297,7 @@ public class GuidebookStructureCommands {
     }
 
     private static String pickFileForSave() {
+        releaseMouseForNativeDialog();
         try (var stack = MemoryStack.stackPush()) {
 
             return TinyFileDialogs.tinyfd_saveFileDialog(
@@ -251,6 +306,10 @@ public class GuidebookStructureCommands {
                     createFilterPatterns(stack),
                     FILE_PATTERN_DESC);
         }
+    }
+
+    private static void releaseMouseForNativeDialog() {
+        Minecraft.getInstance().mouseHandler.releaseMouse();
     }
 
     private static PointerBuffer createFilterPatterns(MemoryStack stack) {

@@ -14,11 +14,14 @@ public final class ClientGuidebooks {
 
     public static void open(ResourceLocation guideId, PageAnchor page) {
         var client = Minecraft.getInstance();
-        client.execute(() -> Guidebooks.get(guideId).ifPresentOrElse(
-                guide -> client.setScreen(GuideScreen.openNew(
-                        guide.ae2Guide(),
-                        page,
-                        GlobalInMemoryHistory.INSTANCE)),
+        client.tell(() -> Guidebooks.get(guideId).ifPresentOrElse(
+                guide -> {
+                    guide.ae2Guide().reloadDevelopmentSourcesNow();
+                    client.setScreen(GuideScreen.openNew(
+                            guide.ae2Guide(),
+                            page,
+                            GlobalInMemoryHistory.INSTANCE));
+                },
                 () -> {
                     if (client.player != null) {
                         client.player.displayClientMessage(

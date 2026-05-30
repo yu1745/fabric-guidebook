@@ -80,7 +80,9 @@ import appengx.libs.mdast.model.MdAstThematicBreak;
 import appengx.libs.mdx.MdxSyntax;
 import appengx.libs.micromark.extensions.YamlFrontmatterSyntax;
 import appengx.libs.micromark.extensions.gfm.GfmTableSyntax;
+import appengx.libs.micromark.ParseException;
 import appengx.libs.unist.UnistNode;
+import appengx.libs.unist.UnistPoint;
 
 @ApiStatus.Internal
 public final class PageCompiler {
@@ -145,6 +147,39 @@ public final class PageCompiler {
         return new ParsedGuidePage(sourcePack, id, pageContent, astRoot, frontmatter);
     }
 
+    public static ParsedGuidePage parseError(String sourcePack, ResourceLocation id, String pageContent,
+            Exception error) {
+        pageContent = pageContent.replaceAll("\\r\\n?", "\n");
+
+        var root = new MdAstRoot();
+
+        var heading = new MdAstHeading();
+        heading.depth = 1;
+        heading.addChild(text("Guide page error"));
+        root.addChild(heading);
+
+        var summary = new MdAstParagraph();
+        summary.addChild(text("Failed to parse guide page " + id + "."));
+        root.addChild(summary);
+
+        var details = new MdAstParagraph();
+        details.addChild(text(formatParseError(error)));
+        root.addChild(details);
+
+        var code = new MdAstCode();
+        code.value = formatErrorSnippet(pageContent, getErrorPoint(error));
+        root.addChild(code);
+
+        var frontmatter = parseFrontmatterFromSource(id, pageContent);
+        return new ParsedGuidePage(sourcePack, id, pageContent, root, frontmatter);
+    }
+
+    private static MdAstText text(String value) {
+        var text = new MdAstText();
+        text.value = value;
+        return text;
+    }
+
     public static GuidePage compile(PageCollection pages, ExtensionCollection extensions, ParsedGuidePage parsedPage) {
         // Translate page tree over to layout pages
         var document = new PageCompiler(pages, extensions, parsedPage.sourcePack, parsedPage.id, parsedPage.source)
@@ -187,6 +222,55 @@ public final class PageCompiler {
         }
 
         return Objects.requireNonNullElse(result, new Frontmatter(null, Map.of()));
+    }
+
+    private static Frontmatter parseFrontmatterFromSource(ResourceLocation pageId, String pageContent) {
+        if (!pageContent.startsWith("---\n")) {
+            return new Frontmatter(null, Map.of());
+        }
+
+        var end = pageContent.indexOf("\n---", 4);
+        if (end == -1) {
+            return new Frontmatter(null, Map.of());
+        }
+
+        try {
+            return Frontmatter.parse(pageId, pageContent.substring(4, end));
+        } catch (Exception ignored) {
+            return new Frontmatter(null, Map.of());
+        }
+    }
+
+    @Nullable
+    private static UnistPoint getErrorPoint(Exception error) {
+        if (error instanceof ParseException parseException) {
+            return parseException.getFrom();
+        }
+        return null;
+    }
+
+    private static String formatParseError(Exception error) {
+        var message = error.getMessage() != null ? error.getMessage() : error.getClass().getSimpleName();
+        var point = getErrorPoint(error);
+        if (point != null) {
+            return "Line " + point.line() + ", column " + point.column() + ": " + message;
+        }
+        return message;
+    }
+
+    private static String formatErrorSnippet(String pageContent, @Nullable UnistPoint point) {
+        if (point == null) {
+            return pageContent;
+        }
+
+        var lines = pageContent.split("\n", -1);
+        var lineIndex = Math.max(0, Math.min(point.line() - 1, lines.length - 1));
+        var lineNumber = lineIndex + 1;
+        var line = lines[lineIndex];
+        var prefix = lineNumber + " | ";
+
+        return prefix + line + "\n"
+                + " ".repeat(prefix.length() + Math.max(0, point.column() - 1)) + "^";
     }
 
     public void compileBlockContext(MdAstParent<?> markdownParent, LytBlockContainer layoutParent) {

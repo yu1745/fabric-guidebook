@@ -1,6 +1,7 @@
 package appengx.guidebook.client;
 
 import appengx.client.guidebook.command.GuidebookStructureCommands;
+import appengx.client.guidebook.command.GuidebookStructureSelection;
 import appengx.guidebook.api.Guidebooks;
 import appengx.guidebook.FabricGuidebook;
 import appengx.guidebook.api.Guide;
@@ -20,6 +21,8 @@ public final class FabricGuidebookClient implements ClientModInitializer {
         Guidebooks.setOpenHandler(ClientGuidebooks::open);
         ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(new GuideResourceReloader());
         OpenGuideHotkey.init();
+        GuidebookDevCommands.register();
+        GuidebookStructureSelection.registerClient();
         ServerLifecycleEvents.SERVER_STARTING.register(server -> GuidebookStructureCommands.register(
                 server.getCommands().getDispatcher()));
     }

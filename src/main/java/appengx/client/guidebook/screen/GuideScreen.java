@@ -293,15 +293,19 @@ public class GuideScreen extends Screen {
      */
     @Nullable
     private String getExternalSourceName() {
+        var pageNamespace = currentPage.id().getNamespace();
+
+        // Pages in the guide's own namespace are native content for that guide. On Fabric,
+        // Resource.sourcePackId can be a generic mod resource pack id, which would otherwise
+        // render as "Content from Mod resources" even for the owning mod's own pages.
+        if (guide.getDefaultNamespace().equals(pageNamespace)) {
+            return null;
+        }
+
         var sourcePackId = currentPage.sourcePack();
         // If the pages came directly from a mod resource pack, we have to use the mod-list to resolve its name
         if (sourcePackId.startsWith("mod:")) {
             var modId = sourcePackId.substring("mod:".length());
-
-            // Only show the source marker for pages that are not native to the guides mod
-            if (guide.getDefaultNamespace().equals(modId)) {
-                return null;
-            }
 
             return FabricLoaderImpl.INSTANCE.getModContainer(modId)
                     .map(ModContainer::getMetadata)
@@ -309,9 +313,13 @@ public class GuideScreen extends Screen {
                     .orElse(null);
         }
 
-        // Only show the source marker for pages that are not native to the guides mod
-        if (guide.getDefaultNamespace().equals(sourcePackId)) {
-            return null;
+        // If the page namespace belongs to another loaded mod, prefer the mod's display name
+        // over Fabric's generic "Mod resources" pack description.
+        var sourceModName = FabricLoaderImpl.INSTANCE.getModContainer(pageNamespace)
+                .map(ModContainer::getMetadata)
+                .map(ModMetadata::getName);
+        if (sourceModName.isPresent()) {
+            return sourceModName.get();
         }
 
         var pack = Minecraft.getInstance().getResourcePackRepository().getPack(sourcePackId);

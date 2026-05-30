@@ -25,7 +25,6 @@ dependencies {
     }
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-    implementation "io.methvin:directory-watcher:${project.directory_watcher_version}"
     implementation "org.yaml:snakeyaml:${project.snakeyaml_version}"
     implementation "com.google.flatbuffers:flatbuffers-java:${project.flatbuffers_version}"
 }
