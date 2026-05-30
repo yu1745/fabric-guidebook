@@ -64,6 +64,7 @@ import appengx.util.Platform;
  */
 public final class Guide implements PageCollection {
     private static final Logger LOGGER = LoggerFactory.getLogger(Guide.class);
+    private static final String LOCALIZED_PAGES_FOLDER = "i18n";
 
     private final String defaultNamespace;
     private final String folder;
@@ -250,13 +251,31 @@ public final class Guide implements PageCollection {
     private Map<ResourceLocation, ParsedGuidePage> loadPages(ResourceManager resourceManager) {
         Map<ResourceLocation, ParsedGuidePage> pages = new HashMap<>();
 
+        loadPagesFrom(resourceManager, pages, folder, folder + "/", true);
+
+        var language = Minecraft.getInstance().getLanguageManager().getSelected()
+                .toLowerCase(Locale.ROOT);
+        var localizedFolder = folder + "/" + LOCALIZED_PAGES_FOLDER + "/" + language;
+        loadPagesFrom(resourceManager, pages, localizedFolder, localizedFolder + "/", false);
+
+        return pages;
+    }
+
+    private void loadPagesFrom(ResourceManager resourceManager,
+            Map<ResourceLocation, ParsedGuidePage> pages,
+            String searchFolder,
+            String pageIdPrefix,
+            boolean skipLocalizedPages) {
         var resources = resourceManager.listResources(folder,
-                location -> location.getPath().endsWith(".md"));
+                location -> location.getPath().startsWith(searchFolder + "/")
+                        && location.getPath().endsWith(".md")
+                        && (!skipLocalizedPages || !location.getPath().startsWith(
+                                folder + "/" + LOCALIZED_PAGES_FOLDER + "/")));
 
         for (var entry : resources.entrySet()) {
             var pageId = new ResourceLocation(
                     entry.getKey().getNamespace(),
-                    entry.getKey().getPath().substring((folder + "/").length()));
+                    entry.getKey().getPath().substring(pageIdPrefix.length()));
 
             String sourcePackId = entry.getValue().sourcePackId();
             try (var in = entry.getValue().open()) {
@@ -265,8 +284,6 @@ public final class Guide implements PageCollection {
                 LOGGER.error("Failed to load guidebook page {} from pack {}", pageId, sourcePackId, e);
             }
         }
-
-        return pages;
     }
 
     private void applyPages(Map<ResourceLocation, ParsedGuidePage> pages) {
