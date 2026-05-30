@@ -16,10 +16,22 @@ import appengx.client.guidebook.compiler.tags.FloatingImageCompiler;
 import appengx.client.guidebook.compiler.tags.ItemGridCompiler;
 import appengx.client.guidebook.compiler.tags.ItemLinkCompiler;
 import appengx.client.guidebook.compiler.tags.SubPagesCompiler;
+import appengx.client.guidebook.scene.BlockImageTagCompiler;
+import appengx.client.guidebook.scene.ItemImageTagCompiler;
+import appengx.client.guidebook.scene.SceneTagCompiler;
+import appengx.client.guidebook.scene.annotation.BlockAnnotationElementCompiler;
+import appengx.client.guidebook.scene.annotation.BoxAnnotationElementCompiler;
+import appengx.client.guidebook.scene.annotation.DiamondAnnotationElementCompiler;
+import appengx.client.guidebook.scene.annotation.LineAnnotationElementCompiler;
+import appengx.client.guidebook.scene.element.ImportStructureElementCompiler;
+import appengx.client.guidebook.scene.element.IsometricCameraElementCompiler;
+import appengx.client.guidebook.scene.element.SceneBlockElementCompiler;
+import appengx.client.guidebook.scene.element.SceneElementTagCompiler;
 
 public final class DefaultExtensions {
     private static final List<Registration<?>> EXTENSIONS = List.of(
-            new Registration<>(TagCompiler.EXTENSION_POINT, DefaultExtensions::tagCompilers));
+            new Registration<>(TagCompiler.EXTENSION_POINT, DefaultExtensions::tagCompilers),
+            new Registration<>(SceneElementTagCompiler.EXTENSION_POINT, DefaultExtensions::sceneElementTagCompilers));
 
     private DefaultExtensions() {
     }
@@ -50,9 +62,23 @@ public final class DefaultExtensions {
                 new BreakCompiler(),
                 new ItemGridCompiler(),
                 new CategoryIndexCompiler(),
+                new BlockImageTagCompiler(),
+                new ItemImageTagCompiler(),
                 new BoxTagCompiler(BoxFlowDirection.ROW),
                 new BoxTagCompiler(BoxFlowDirection.COLUMN),
+                new SceneTagCompiler(),
                 new SubPagesCompiler());
+    }
+
+    private static List<SceneElementTagCompiler> sceneElementTagCompilers() {
+        return List.of(
+                new SceneBlockElementCompiler(),
+                new ImportStructureElementCompiler(),
+                new IsometricCameraElementCompiler(),
+                new BlockAnnotationElementCompiler(),
+                new BoxAnnotationElementCompiler(),
+                new LineAnnotationElementCompiler(),
+                new DiamondAnnotationElementCompiler());
     }
 
     private record Registration<T extends Extension> (ExtensionPoint<T> extensionPoint,
