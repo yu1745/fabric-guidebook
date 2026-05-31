@@ -1,5 +1,7 @@
 # Fabric Guidebook
 
+> **[中文文档](README_zh.md)**
+
 A generic Fabric guidebook mod for Markdown content supplied by mods or resource packs.
 
 ## Resource Convention
@@ -57,6 +59,17 @@ Give a guide-bound item:
 ```text
 /give @p fabric_guidebook:guide{GuideId:"modid:guide"}
 ```
+
+## Getting Started
+
+fabric-guidebook ships its own in-game guidebook. To open it:
+
+1. Run `/give @p fabric_guidebook:guide{GuideId:"fabric_guidebook:main"}` to get the book
+2. Press **G** (default keybind, configurable in controls) to open it
+
+## Real-World Usage
+
+See the [IC2 Fabric mod](https://github.com/yu1745/ic2-fabric) for a production example of how to integrate fabric-guidebook into a mod.
 
 ## License Notice
 
