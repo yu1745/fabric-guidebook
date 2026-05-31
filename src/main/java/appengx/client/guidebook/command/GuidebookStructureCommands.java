@@ -203,7 +203,15 @@ public class GuidebookStructureCommands {
                     return 1;
                 })
                 .then(Commands.argument("origin", BlockPosArgument.blockPos())
-                        .then(Commands.argument("sizeX", IntegerArgumentType.integer(1))
+                        .then(Commands.argument("to", BlockPosArgument.blockPos())
+                                .executes(context -> {
+                                    var origin = BlockPosArgument.getBlockPos(context, "origin");
+                                    var to = BlockPosArgument.getBlockPos(context, "to");
+                                    exportStructureBetween(context.getSource().getLevel(), origin, to);
+                                    return 1;
+                                }))
+                        .then(Commands.literal("size")
+                                .then(Commands.argument("sizeX", IntegerArgumentType.integer(1))
                                 .then(Commands.argument("sizeY", IntegerArgumentType.integer(1))
                                         .then(Commands.argument("sizeZ", IntegerArgumentType.integer(1))
                                                 .executes(context -> {
@@ -213,9 +221,22 @@ public class GuidebookStructureCommands {
                                                     var sizeZ = IntegerArgumentType.getInteger(context, "sizeZ");
                                                     var size = new Vec3i(sizeX, sizeY, sizeZ);
                                                     exportStructure(context.getSource().getLevel(), origin, size);
-                                                    return 0;
-                                                })))));
+                                                    return 1;
+                                                }))))));
         rootCommand.then(exportSubcommand);
+    }
+
+    private static void exportStructureBetween(ServerLevel level, BlockPos first, BlockPos second) {
+        var minX = Math.min(first.getX(), second.getX());
+        var minY = Math.min(first.getY(), second.getY());
+        var minZ = Math.min(first.getZ(), second.getZ());
+        var maxX = Math.max(first.getX(), second.getX());
+        var maxY = Math.max(first.getY(), second.getY());
+        var maxZ = Math.max(first.getZ(), second.getZ());
+
+        var origin = new BlockPos(minX, minY, minZ);
+        var size = new Vec3i(1 + maxX - minX, 1 + maxY - minY, 1 + maxZ - minZ);
+        exportStructure(level, origin, size);
     }
 
     private static void exportStructure(ServerLevel level, BlockPos origin, Vec3i size) {

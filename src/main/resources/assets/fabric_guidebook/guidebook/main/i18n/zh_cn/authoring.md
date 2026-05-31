@@ -160,14 +160,15 @@ categories:
 /fabricguidebookstructure exportstructure
 /fabricguidebookstructure clearstructureselection
 /fabricguidebookstructure importstructure ~ ~ ~
-/fabricguidebookstructure exportstructure ~ ~ ~ 5 4 5
+/fabricguidebookstructure exportstructure ~ ~ ~ ~4 ~3 ~4
+/fabricguidebookstructure exportstructure ~ ~ ~ size 5 4 5
 ```
 
 `structuretool` 会给一根特殊木棍。左键方块设置起点，右键方块设置终点，然后执行 `/fabricguidebookstructure exportstructure` 就会导出当前选区。选中的区域会在世界中实时渲染成青色线框。
 
 `clearstructureselection` 会清除当前选区。
 
-`importstructure` 会把 `.snbt` 或 `.nbt` 文件放进单人世界。如果需要手动输入坐标，也仍然可以使用带 origin 和 size 参数的 `exportstructure`。
+`importstructure` 会把 `.snbt` 或 `.nbt` 文件放进单人世界。`exportstructure` 的坐标形式使用两个包含端点的角点，和选区工具一致。如果需要手动输入起点和尺寸，可以使用 `size` 形式。
 
 ## 开发流程
 

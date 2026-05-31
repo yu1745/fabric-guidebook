@@ -160,14 +160,15 @@ Structure authoring commands:
 /fabricguidebookstructure exportstructure
 /fabricguidebookstructure clearstructureselection
 /fabricguidebookstructure importstructure ~ ~ ~
-/fabricguidebookstructure exportstructure ~ ~ ~ 5 4 5
+/fabricguidebookstructure exportstructure ~ ~ ~ ~4 ~3 ~4
+/fabricguidebookstructure exportstructure ~ ~ ~ size 5 4 5
 ```
 
 `structuretool` gives a special stick. Left-click a block to set the start corner, right-click a block to set the end corner, then run `/fabricguidebookstructure exportstructure` to save that selected box. The selected region is rendered as a cyan wireframe in the world.
 
 `clearstructureselection` clears the current selection.
 
-`importstructure` places an `.snbt` or `.nbt` file into a singleplayer world. The coordinate form of `exportstructure` is still available when you want to type the origin and size manually.
+`importstructure` places an `.snbt` or `.nbt` file into a singleplayer world. The coordinate form of `exportstructure` takes two inclusive corners, matching the selection tool. Use the `size` form when you want to type the origin and size manually.
 
 ## Development loop
 
