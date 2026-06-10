@@ -1,6 +1,7 @@
 package appengx.guidebook.item;
 
 import appengx.guidebook.FabricGuidebook;
+import appengx.guidebook.GuideStarterBooks;
 import net.fabricmc.fabric.api.item.v1.FabricItemSettings;
 import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
 import net.minecraft.core.Registry;
@@ -16,6 +17,7 @@ public final class GuidebookItems {
 
     public static void register() {
         Registry.register(BuiltInRegistries.ITEM, FabricGuidebook.id("guide"), GUIDE);
-        ItemGroupEvents.modifyEntriesEvent(CreativeModeTabs.TOOLS_AND_UTILITIES).register(entries -> entries.accept(GUIDE));
+        ItemGroupEvents.modifyEntriesEvent(CreativeModeTabs.TOOLS_AND_UTILITIES)
+                .register(GuideStarterBooks::addToCreativeTab);
     }
 }

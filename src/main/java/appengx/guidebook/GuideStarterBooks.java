@@ -14,6 +14,7 @@ import com.google.gson.JsonParser;
 
 import appengx.guidebook.api.Guidebooks;
 import appengx.guidebook.item.GuidebookItems;
+import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroupEntries;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.metadata.ModMetadata;
@@ -25,7 +26,7 @@ import net.minecraft.world.item.ItemStack;
 
 public final class GuideStarterBooks {
     private static final String GUIDE_DEFINITIONS_FOLDER = "guidebook_guides";
-    private static final Map<ResourceLocation, StarterGuide> STARTER_GUIDES = new LinkedHashMap<>();
+    private static final Map<ResourceLocation, GuideBookDefinition> GUIDEBOOKS = new LinkedHashMap<>();
 
     private GuideStarterBooks() {
     }
@@ -36,7 +37,7 @@ public final class GuideStarterBooks {
     }
 
     private static void discoverGuides() {
-        STARTER_GUIDES.clear();
+        GUIDEBOOKS.clear();
 
         for (var mod : FabricLoader.getInstance().getAllMods()) {
             for (var root : mod.getRootPaths()) {
@@ -86,37 +87,52 @@ public final class GuideStarterBooks {
 
         try (var reader = new InputStreamReader(Files.newInputStream(path), StandardCharsets.UTF_8)) {
             var json = JsonParser.parseReader(reader).getAsJsonObject();
-            if (!readBoolean(json, "starter_item", true)) {
-                return;
-            }
             var title = readString(json, "title", defaultModName(namespace, guideId.toString()));
             var titleKey = readString(json, "title_key", "");
-            STARTER_GUIDES.putIfAbsent(guideId, new StarterGuide(guideId, title, titleKey));
+            var starterItem = readBoolean(json, "starter_item", true);
+            GUIDEBOOKS.putIfAbsent(guideId, new GuideBookDefinition(guideId, title, titleKey, starterItem));
         } catch (Exception ignored) {
         }
     }
 
     private static void giveMissingGuides(ServerPlayer player) {
-        for (var guide : STARTER_GUIDES.values()) {
+        for (var guide : GUIDEBOOKS.values()) {
+            if (!guide.starterItem()) {
+                continue;
+            }
             var tag = givenTag(guide.id());
             if (player.getTags().contains(tag)) {
                 continue;
             }
 
             player.addTag(tag);
-            var stack = createGuideStack(guide);
+            var stack = createStarterGuideStack(guide);
             if (!player.getInventory().add(stack)) {
                 player.drop(stack, false);
             }
         }
     }
 
-    private static ItemStack createGuideStack(StarterGuide guide) {
+    public static void addToCreativeTab(FabricItemGroupEntries entries) {
+        for (var guide : GUIDEBOOKS.values()) {
+            entries.accept(createCreativeGuideStack(guide));
+        }
+    }
+
+    private static ItemStack createStarterGuideStack(GuideBookDefinition guide) {
+        return createGuideStack(guide, guide.starterTitleComponent());
+    }
+
+    private static ItemStack createCreativeGuideStack(GuideBookDefinition guide) {
+        return createGuideStack(guide, guide.guideTitleComponent());
+    }
+
+    private static ItemStack createGuideStack(GuideBookDefinition guide, Component title) {
         var stack = new ItemStack(GuidebookItems.GUIDE);
         var tag = new CompoundTag();
         tag.putString(Guidebooks.GUIDE_ID_NBT, guide.id().toString());
         stack.setTag(tag);
-        stack.setHoverName(guide.titleComponent());
+        stack.setHoverName(title);
         return stack;
     }
 
@@ -140,8 +156,15 @@ public final class GuideStarterBooks {
                 .orElse(fallback);
     }
 
-    private record StarterGuide(ResourceLocation id, String title, String titleKey) {
-        Component titleComponent() {
+    private record GuideBookDefinition(ResourceLocation id, String title, String titleKey, boolean starterItem) {
+        Component guideTitleComponent() {
+            if (!titleKey.isBlank()) {
+                return Component.translatable(titleKey);
+            }
+            return Component.literal(title);
+        }
+
+        Component starterTitleComponent() {
             if (!titleKey.isBlank()) {
                 return Component.translatable(titleKey);
             }
